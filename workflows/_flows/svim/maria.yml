@@ -1,0 +1,30 @@
+id: svim_brain
+namespace: company.svim
+
+tasks:
+  - id: agent
+    type: io.kestra.plugin.docker.Run
+    containerImage: gmoreiradev/svim-maria:v0.0.1
+
+    env:
+      SVIM: "SVIM Pamplona"
+      CLIENT_ID: "{{ trigger.body.user_id }}"
+      CLIENT_NOME: "{{ trigger.body.name }}"
+      CLIENT_WHATSAPP: "{{ trigger.body.phone }}"
+      MESSAGE: "{{ trigger.body.message }}"
+      OPENAI_API_KEY: "{{ kv('SVIM_OPENAI_API_KEY') }}"
+      X_API_TOKEN: "{{ kv('X_API_TOKEN_TRINKS') }}"
+      ESTABELECIMENTO_ID: "{{ kv('ESTABELECIMENTO_ID') }}"
+      URL_BASE: "{{ kv('URL_BASE') }}"
+
+    commands:
+      - "python"
+      - "-m"
+      - "app.agent.main"
+
+triggers:
+  - id: webhook
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: svim-pamplona
+    wait: true
+    returnOutputs: true

@@ -1,0 +1,32 @@
+# Python junk
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual envs
+.venv/
+venv/
+
+# IDE files
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# OS files
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Caches
+.cache/
+pytest_cache/
+
+# Local databases
+*.sqlite

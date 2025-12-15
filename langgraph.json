@@ -1,0 +1,11 @@
+{
+  "schema_version": "0.1",
+  "dependencies": [
+    "langchain",
+    "langgraph",
+    "langchain-openai"
+  ],
+  "graphs": {
+    "svim": "./app/agent/graph.py:graph"
+  }
+}

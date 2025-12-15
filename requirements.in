@@ -1,0 +1,11 @@
+datetime
+dotenv 
+typing_extensions 
+langchain_openai 
+langchain_core
+langgraph
+langgraph
+langgraph
+kestra
+qdrant_client
+requests
