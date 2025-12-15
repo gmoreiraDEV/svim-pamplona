@@ -5,18 +5,18 @@ WORKDIR /app
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-    curl \
     ca-certificates \
-    build-essential \
+    curl \
  && rm -rf /var/lib/apt/lists/*
 
-COPY ./requirements.txt .
+COPY requirements.txt .
 RUN python -m pip install --no-cache-dir --upgrade pip \
  && python -m pip install --no-cache-dir -r requirements.txt
 
-# ✅ importante: mantém a pasta app como pacote "app"
+# ✅ copia a pasta app como subpasta /app/app
 COPY app ./app
 
+# ✅ opcional, mas ajuda em qualquer runner
 ENV PYTHONPATH=/app
 
 CMD ["python", "-m", "app.agent.main"]
