@@ -92,15 +92,29 @@ class QdrantMemory:
         """Busca os K itens de memória mais relevantes de um usuário."""
         query_vector = self._embed([query or ""])[0]
 
-        results = self.client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
-            limit=k,
-            with_payload=True,
-            query_filter=Filter(
-                must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
-            ),
+        query_filter = Filter(
+            must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
         )
+
+        # Compatibilidade com diferentes versões do cliente Qdrant
+        if hasattr(self.client, "search"):
+            results = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                limit=k,
+                with_payload=True,
+                query_filter=query_filter,
+            )
+        elif hasattr(self.client, "search_points"):
+            results = self.client.search_points(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                limit=k,
+                with_payload=True,
+                query_filter=query_filter,
+            ).points
+        else:
+            raise AttributeError("QdrantClient não possui métodos search/search_points")
 
         payloads = [r.payload for r in results if r.payload]
         return [
