@@ -16,12 +16,14 @@
 
 ## Database
 
-- Não há persistência local neste projeto. O agente consome APIs externas definidas em `app/utils/http_client.py` (URLs e tokens via variáveis de ambiente).
+- O agente grava sessões (`svim_sessions`) e logs (`interaction_logs`) em Postgres via `DATABASE_URL`.
+- Migrations SQL estão em `sql/`; use `make db-migrate` ou `make db-migrate-one` para aplicá-las.
 
 ## Docs
 
 - [Diagramas e definições de projeto](./docs/diagrams_definitions.md)
 - [Intents](./docs/intents.md)
+- [Banco de dados](./docs/database.md)
 
 ## Pré-requisitos
 
@@ -38,8 +40,9 @@ Use `.env` (copie de `.env.example` com `make env`) ou exporte antes de rodar:
 - `URL_BASE`, `X_API_TOKEN`, `ESTABELECIMENTO_ID`: dados da API do salão.
 - `MESSAGE`: mensagem do cliente que inicia a conversa.
 - `SVIM`, `CLIENT_ID`, `CLIENT_NOME`, `CLIENT_WHATSAPP`: dados de contexto do cliente.
-- Memória/Qdrant (opcional para histórico): `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION` (default `svim_conversations`), `EMBEDDINGS_MODEL` (default `text-embedding-3-small`), `QDRANT_VECTOR_SIZE` (1536 para o modelo small, 3072 para o large).
-- `HTTP_TIMEOUT` (opcional), `DATABASE_URL` (não usado localmente).
+- Sessão/logs (opcional): `SESSION_ID` (se quiser separar de `CLIENT_ID`), `DATABASE_URL` (aplicação) e `DATABASE_URL_MAKE` (usada pelo Make) para gravar sessões (`svim_sessions`) e interações (`interaction_logs`).
+- Memória/Qdrant (opcional para histórico): `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION` (default `svim-maria-messages`), `EMBEDDINGS_MODEL` (default `text-embedding-3-small`), `QDRANT_VECTOR_SIZE` (1536 para o modelo small, 3072 para o large).
+- `HTTP_TIMEOUT` (opcional).
 
 ## Instalação
 
@@ -70,3 +73,5 @@ O retorno é um JSON com `reply` (mensagem da IA) e o histórico de `messages`.
 ## Outras tarefas
 
 - Gerar `requirements.txt` a partir de `requirements.in`: `make compile-deps`
+- Rodar todas as migrations de `sql/`: `make db-migrate` (usa `.env` para carregar `DATABASE_URL_MAKE`)
+- Rodar uma migration específica: `make db-migrate-one MIGRATION=sql/XX_nome.sql`

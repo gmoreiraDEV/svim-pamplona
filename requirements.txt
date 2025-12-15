@@ -99,6 +99,10 @@ portalocker==2.10.1
     # via qdrant-client
 protobuf==6.33.2
     # via grpcio-tools
+psycopg[binary]==3.2.3
+    # via -r requirements.in
+psycopg-binary==3.2.3
+    # via psycopg
 pydantic==2.12.5
     # via
     #   langchain-core

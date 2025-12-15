@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 
 from app.agent.graph import graph
+from app.utils.db import get_connection
+from app.utils.session_logger import log_interaction, upsert_session
 
 load_dotenv()
 
@@ -18,19 +20,42 @@ async def run_once() -> Dict[str, Any]:
     if not message:
         raise ValueError("SVIM_MESSAGE não foi definido nas variáveis de ambiente")
 
+    client_id = os.getenv("CLIENT_ID")
+    session_id = os.getenv("SESSION_ID") or client_id
+
     try:
         state = await graph.ainvoke({
             "messages": [HumanMessage(content=message)],
-            "cliente_id": os.getenv("CLIENT_ID"),
+            "cliente_id": client_id,
         })
 
         messages = state.get("messages", [])
         ai_msg = next((m for m in reversed(messages) if getattr(m, "type", "") == "ai"), None)
 
-        return {
+        result = {
             "reply": ai_msg.content if ai_msg else None,
             "messages": [{"type": m.type, "content": m.content} for m in messages],
+            "history": state.get("history"),
+            "cliente_id": state.get("cliente_id"),
+            "session_id": session_id,
         }
+
+        if os.getenv("DATABASE_URL"):
+            try:
+                with get_connection() as conn:
+                    upsert_session(conn, client_id=client_id or "unknown", session_id=session_id or "unknown")
+                    log_interaction(
+                        conn,
+                        client_id=client_id,
+                        session_id=session_id,
+                        intent=None, 
+                        request_json={"message": message, "cliente_id": client_id, "session_id": session_id},
+                        response_json=result,
+                    )
+            except Exception as db_exc:
+                print(f"[SVIM] DB log error: {db_exc}")
+
+        return result
     finally:
         pass
     

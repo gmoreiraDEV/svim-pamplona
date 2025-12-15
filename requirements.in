@@ -7,5 +7,6 @@ langgraph
 langgraph
 langgraph
 kestra
+psycopg[binary]
 qdrant_client
 requests
