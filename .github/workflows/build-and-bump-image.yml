@@ -34,8 +34,11 @@ jobs:
         run: |
           FILE="workflows/_flows/svim/maria.yml"
 
-          # Pega a versão atual no formato X.Y.Z a partir da linha containerImage
-          current=$(grep 'containerImage:' "$FILE" | sed -E 's/.*:v([0-9]+\.[0-9]+\.[0-9]+)/\1/')
+          # Pega repo e versão atuais (ex: gmoreiradev/svim-maria:v0.0.2)
+          line=$(grep 'containerImage:' "$FILE")
+          repo=$(echo "$line" | sed -E 's/.*containerImage:[[:space:]]*([^:]+):v[0-9]+\.[0-9]+\.[0-9]+/\1/')
+          current=$(echo "$line" | sed -E 's/.*:v([0-9]+\.[0-9]+\.[0-9]+)/\1/')
+          echo "Current repo: $repo"
           echo "Current version: $current"
 
           IFS='.' read -r major minor patch <<< "$current"
@@ -47,18 +50,20 @@ jobs:
 
           echo "New version: $new_version"
 
-          # Atualiza a linha do containerImage
-          sed -i "s#containerImage: gmoreiradev/svim-maria:v${major}.${minor}.${old_patch}#containerImage: gmoreiradev/svim-agent:${new_version}#" "$FILE"
+          # Atualiza a linha do containerImage mantendo o repo detectado
+          sed -i "s#containerImage: ${repo}:v${major}.${minor}.${old_patch}#containerImage: ${repo}:${new_version}#" "$FILE"
 
           # Exporta para os próximos steps
           echo "IMAGE_TAG=${new_version}" >> $GITHUB_ENV
+          echo "IMAGE_NAME=${repo}" >> $GITHUB_ENV
           echo "image_tag=${new_version}" >> $GITHUB_OUTPUT
+          echo "image_name=${repo}" >> $GITHUB_OUTPUT
 
       - name: Build & push image
         run: |
           echo "Building and pushing image with tag: $IMAGE_TAG"
-          make build-image IMAGE_TAG="${IMAGE_TAG}"
-          make push-image IMAGE_TAG="${IMAGE_TAG}"
+          make build-image IMAGE_NAME="${IMAGE_NAME}" IMAGE_TAG="${IMAGE_TAG}"
+          make push-image IMAGE_NAME="${IMAGE_NAME}" IMAGE_TAG="${IMAGE_TAG}"
 
       - name: Commit and push updated maria.yml
         run: |
@@ -77,7 +82,7 @@ jobs:
             exit 1
           fi
 
-          git commit -m "chore: bump svim-maria image to ${IMAGE_TAG} [skip ci]"
+          git commit -m "chore: bump ${IMAGE_NAME} image to ${IMAGE_TAG} [skip ci]"
           git push
 
       - name: Trigger Kestra sync from git
