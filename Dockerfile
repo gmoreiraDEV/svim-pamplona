@@ -19,7 +19,7 @@ COPY ./requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia o código do agente
-COPY app/agent ./agent
+COPY app/ .
 
 # Garante que /app está no PYTHONPATH
 ENV PYTHONPATH=/app
