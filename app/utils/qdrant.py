@@ -142,6 +142,56 @@ class QdrantMemory:
 
         return [{"role": p.get("role", "user"), "content": p.get("content", "")} for p in payloads]
 
+    def get_hybrid_context(
+        self,
+        session_id: Optional[str],
+        user_id: Optional[str],
+        query: str,
+        recent_k: int = 6,
+        semantic_k: int = 4,
+    ) -> List[Dict[str, Any]]:
+        """
+        Memória híbrida:
+        - 1) Recência: últimas mensagens (prioriza session_id; fallback user_id)
+        - 2) Semântica: mensagens mais relevantes para 'query' (preferencialmente por user_id)
+        Retorna uma lista final sem duplicatas.
+        """
+        # 1) Recente (conversa)
+        recent = self.get_recent_context(session_id=session_id, user_id=user_id, k=recent_k)
+
+        # 2) Semântico (lembranças antigas úteis)
+        semantic: List[Dict[str, Any]] = []
+        if query and query.strip():
+            # Aqui é importante: semântica por USER_ID (memória "do cliente", atravessa sessões)
+            if self._is_valid_id(user_id):
+                semantic = self.get_user_context(user_id=user_id, query=query, k=semantic_k)
+            else:
+                # se não tiver user_id válido, tenta semântica por session_id (melhor que nada)
+                # (usa o mesmo método, mas com "user_id" = session_id não rola porque o filtro do get_user_context é por user_id)
+                # então, nesse fallback, a gente simplesmente não faz semântico.
+                semantic = []
+
+        # Deduplicação (role+content)
+        seen = set()
+        merged: List[Dict[str, Any]] = []
+
+        def _add(msg: Dict[str, Any]):
+            key = (msg.get("role", ""), (msg.get("content") or "").strip())
+            if not key[1]:
+                return
+            if key in seen:
+                return
+            seen.add(key)
+            merged.append({"role": key[0], "content": key[1]})
+
+        # Ordem: primeiro recência, depois semântica (sem repetir)
+        for m in recent:
+            _add(m)
+        for m in semantic:
+            _add(m)
+
+        return merged
+
     def get_user_context(self, user_id: str, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """Busca os K itens de memória mais relevantes de um usuário."""
         query_vector = self._embed([query or ""])[0]

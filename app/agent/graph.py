@@ -139,14 +139,25 @@ def load_context(state: State) -> State:
 
         state["cliente_id"] = user_id
         state["session_id"] = session_id
+        query = ""
+        last_user_msg = next((m for m in reversed(state.get("messages", [])) if m.type == "human"), None)
+        if last_user_msg:
+            query = last_user_msg.content or ""
 
-        context_messages = memory.get_recent_context(
+        context_messages = memory.get_hybrid_context(
             session_id=session_id,
             user_id=user_id,
-            k=10,
+            query=query,
+            recent_k=6,
+            semantic_k=4,
         )
+
         state["history"] = _format_messages(context_messages)
-        print(f"[SVIM] Loaded {len(context_messages)} context messages for user_id={user_id} session_id={session_id}")
+        print(
+            f"[SVIM] Loaded hybrid context: {len(context_messages)} msgs "
+            f"(user_id={user_id}, session_id={session_id})"
+        )
+
     except Exception as e:
         print(f"[SVIM] Error loading context: {e}")
 
