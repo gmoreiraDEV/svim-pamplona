@@ -134,7 +134,7 @@ def load_context(state: State) -> State:
     try:
         # CLIENT_ID do ambiente é prioridade; depois o que vier no estado.
         user_id = cliente_id or state.get("cliente_id") or "anon"
-        session_id = session_id or state.get("session_id")
+        session_id = os.getenv("SESSION_ID") or state.get("session_id") or "anon-session"
         state["cliente_id"] = user_id
         state["session_id"] = session_id
         last_human = next((m for m in reversed(state["messages"]) if m.type == "human"), None)
@@ -158,7 +158,7 @@ def inject_system(state: State) -> State:
     msgs = state["messages"]
     history = state.get("history") or ""
     user_id = cliente_id or state.get("cliente_id") or "anon"
-    session_id = session_id or state.get("session_id")
+    session_id = state.get("session_id") or os.getenv("SESSION_ID") or "anon-session"
 
     system_content = SYSTEM_PROMPT
 

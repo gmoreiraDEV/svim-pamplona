@@ -21,12 +21,13 @@ async def run_once() -> Dict[str, Any]:
         raise ValueError("SVIM_MESSAGE não foi definido nas variáveis de ambiente")
 
     client_id = os.getenv("CLIENT_ID")
-    session_id = os.getenv("SESSION_ID") or client_id
+    session_id = os.getenv("SESSION_ID")
 
     try:
         state = await graph.ainvoke({
             "messages": [HumanMessage(content=message)],
             "cliente_id": client_id,
+            "session_id": session_id,
         })
 
         messages = state.get("messages", [])
@@ -43,10 +44,10 @@ async def run_once() -> Dict[str, Any]:
         if os.getenv("DATABASE_URL"):
             try:
                 with get_connection() as conn:
-                    upsert_session(conn, client_id=client_id or "unknown", session_id=session_id or "unknown")
+                    upsert_session(conn, user_identifier=client_id or "unknown", session_id=session_id or "unknown")
                     log_interaction(
                         conn,
-                        client_id=client_id,
+                        user_id=client_id,
                         session_id=session_id,
                         intent=None, 
                         request_json={"message": message, "cliente_id": client_id, "session_id": session_id},
