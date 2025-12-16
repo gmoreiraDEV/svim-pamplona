@@ -11,6 +11,7 @@ tasks:
       CLIENT_ID: "{{ trigger.body.user_id }}"
       CLIENT_NOME: "{{ trigger.body.name }}"
       CLIENT_WHATSAPP: "{{ trigger.body.phone }}"
+      SESSION_ID: "{{ trigger.body.session_id }}"
       MESSAGE: "{{ trigger.body.message }}"
       OPENAI_API_KEY: "{{ kv('SVIM_OPENAI_API_KEY') }}"
       X_API_TOKEN: "{{ kv('X_API_TOKEN_TRINKS') }}"
