@@ -25,6 +25,7 @@ svim = os.getenv("SVIM")
 cliente_id = os.getenv("CLIENT_ID")
 cliente_nome = os.getenv("CLIENT_NOME")
 cliente_whatsapp = os.getenv("CLIENT_WHATSAPP")
+session_id = os.getenv("SESSION_ID")
 qdrant_collection = os.getenv("QDRANT_COLLECTION", "svim_conversations")
 embedding_model = os.getenv("EMBEDDINGS_MODEL", "text-embedding-3-small")
 qdrant_vector_size = int(os.getenv("QDRANT_VECTOR_SIZE", "1536"))
@@ -104,6 +105,7 @@ agent = create_react_agent(
 
 class State(TypedDict):
     cliente_id: str | None
+    session_id: str | None
     history: str | None
     messages: Annotated[list[BaseMessage], add_messages]
 
@@ -130,7 +132,11 @@ def load_context(state: State) -> State:
         return state
 
     try:
-        user_id = cliente_id or state.get("cliente_id")
+        # CLIENT_ID do ambiente é prioridade; depois o que vier no estado.
+        user_id = cliente_id or state.get("cliente_id") or "anon"
+        session_id = session_id or state.get("session_id")
+        state["cliente_id"] = user_id
+        state["session_id"] = session_id
         last_human = next((m for m in reversed(state["messages"]) if m.type == "human"), None)
         query = last_human.content if last_human else ""
 
@@ -141,7 +147,7 @@ def load_context(state: State) -> State:
         )
         history_text = _format_messages(context_messages)
         state["history"] = history_text
-        print(f"[SVIM] Loaded {len(context_messages)} context messages for user_id={user_id}")
+        print(f"[SVIM] Loaded {len(context_messages)} context messages for user_id={user_id} session_id={session_id}")
     except Exception as e:
         print(f"[SVIM] Error loading context: {e}")
 
@@ -151,7 +157,8 @@ def load_context(state: State) -> State:
 def inject_system(state: State) -> State:
     msgs = state["messages"]
     history = state.get("history") or ""
-    user_id = cliente_id or state.get("cliente_id")
+    user_id = cliente_id or state.get("cliente_id") or "anon"
+    session_id = session_id or state.get("session_id")
 
     system_content = SYSTEM_PROMPT
 
@@ -163,7 +170,7 @@ def inject_system(state: State) -> State:
     else:
         msgs[0] = SystemMessage(content=system_content)
 
-    return {"messages": msgs, "history": history, "cliente_id": user_id}
+    return {"messages": msgs, "history": history, "cliente_id": user_id, "session_id": session_id}
 
 
 def save_context(state: State) -> State:
@@ -172,7 +179,7 @@ def save_context(state: State) -> State:
         return state
 
     try:
-        user_id = cliente_id or state.get("cliente_id")
+        user_id = cliente_id or state.get("cliente_id") or "anon"
         new_messages: List[Dict[str, str]] = []
         for msg in state["messages"]:
             if msg.type in ("human", "ai"):
