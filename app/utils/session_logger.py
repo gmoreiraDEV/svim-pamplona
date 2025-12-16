@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Dict, Optional
 
 from psycopg import Connection
@@ -55,6 +55,6 @@ def log_interaction(
                 intent,
                 json.dumps(request_json, ensure_ascii=False),
                 json.dumps(response_json, ensure_ascii=False),
-                datetime.utcnow(),
+                datetime.now(UTC),
             ),
         )

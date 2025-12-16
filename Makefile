@@ -12,6 +12,7 @@ help:
 	@echo - make compile-deps - Criar o arquivo requirements.txt
 	@echo - make db-migrate - Executa os scripts SQL em ./sql na ordem numérica
 	@echo - make db-migrate-one MIGRATION=sql/XX_file.sql - Executa apenas uma migration específica
+	@echo - make test-integration - Roda pytest apenas nos testes de integração
 	@echo - make build-image - Faz o build da imagem Docker para ser utilizada no Kestra
 	@echo - make re-build-image - Faz o re-build da ultima imagem do Docker criada
 	@echo - make push-image - Faz o push da imagem buildade para o Docker Hub
@@ -25,6 +26,10 @@ test_tool:
 
 test_tool_verbose:
 	python3 -m pytest -s -q tests/test_tools.py
+
+test-integration:
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	python3 -m pytest -s -ra tests/test_integrations.py
 
 compile-deps:
 	pip-compile requirements.in

@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -128,7 +128,7 @@ class QdrantMemory:
             return
 
         vectors = self._embed([f"{m.get('role')}: {m.get('content','')}" for m in messages])
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
 
         points = []
         for msg, vector in zip(messages, vectors):

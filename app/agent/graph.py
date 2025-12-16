@@ -33,7 +33,7 @@ memory: Optional[QdrantMemory] = None
 if os.getenv("QDRANT_URL"):
     try:
         memory = QdrantMemory(
-            collection_name=qdrant_collection,
+            collection_name=qdrant_collection or "svim_conversations",
             embedding_model=embedding_model,
             vector_size=qdrant_vector_size,
         )
@@ -130,7 +130,7 @@ def load_context(state: State) -> State:
         return state
 
     try:
-        user_id = state.get("cliente_id") or cliente_id or "anon"
+        user_id = cliente_id or state.get("cliente_id")
         last_human = next((m for m in reversed(state["messages"]) if m.type == "human"), None)
         query = last_human.content if last_human else ""
 
@@ -141,6 +141,7 @@ def load_context(state: State) -> State:
         )
         history_text = _format_messages(context_messages)
         state["history"] = history_text
+        print(f"[SVIM] Loaded {len(context_messages)} context messages for user_id={user_id}")
     except Exception as e:
         print(f"[SVIM] Error loading context: {e}")
 
@@ -150,6 +151,8 @@ def load_context(state: State) -> State:
 def inject_system(state: State) -> State:
     msgs = state["messages"]
     history = state.get("history") or ""
+    user_id = cliente_id or state.get("cliente_id")
+
     system_content = SYSTEM_PROMPT
 
     if history:
@@ -160,7 +163,7 @@ def inject_system(state: State) -> State:
     else:
         msgs[0] = SystemMessage(content=system_content)
 
-    return {"messages": msgs, "history": history, "cliente_id": state.get("cliente_id")}
+    return {"messages": msgs, "history": history, "cliente_id": user_id}
 
 
 def save_context(state: State) -> State:
@@ -169,13 +172,14 @@ def save_context(state: State) -> State:
         return state
 
     try:
-        user_id = state.get("cliente_id") or cliente_id or "anon"
+        user_id = cliente_id or state.get("cliente_id")
         new_messages: List[Dict[str, str]] = []
         for msg in state["messages"]:
             if msg.type in ("human", "ai"):
                 new_messages.append({"role": msg.type, "content": msg.content})
 
         memory.store_messages(user_id=user_id, messages=new_messages)
+        print(f"[SVIM] Stored {len(new_messages)} messages for user_id={user_id}")
     except Exception as e:
         print(f"[SVIM] Error saving context: {e}")
 
