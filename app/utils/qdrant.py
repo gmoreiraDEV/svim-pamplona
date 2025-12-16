@@ -122,7 +122,7 @@ class QdrantMemory:
             for p in payloads
         ]
 
-    def store_messages(self, user_id: str, messages: List[Dict[str, str]]) -> None:
+    def store_messages(self, user_id: str, messages: List[Dict[str, str]], session_id: str | None = None) -> None:
         """Persiste mensagens (role/content) no Qdrant."""
         if not messages:
             return
@@ -138,13 +138,14 @@ class QdrantMemory:
                     vector=vector,
                     payload={
                         "user_id": user_id,
+                        "session_id": session_id,
                         "role": msg.get("role", "user"),
                         "content": msg.get("content", ""),
                         "created_at": now,
                     },
                 )
             )
-
+        print(f"Storing {len(points)} messages for user {user_id} in Qdrant.")
         self.client.upsert(
             collection_name=self.collection_name,
             points=points,

@@ -185,8 +185,8 @@ def save_context(state: State) -> State:
             if msg.type in ("human", "ai"):
                 new_messages.append({"role": msg.type, "content": msg.content})
 
-        memory.store_messages(user_id=user_id, messages=new_messages)
-        print(f"[SVIM] Stored {len(new_messages)} messages for user_id={user_id}")
+        memory.store_messages(user_id=user_id, session_id=session_id, messages=new_messages)
+        print(f"[SVIM] Stored {len(new_messages)} messages for user_id={user_id} session_id={session_id}")
     except Exception as e:
         print(f"[SVIM] Error saving context: {e}")
 
