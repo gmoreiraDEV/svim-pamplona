@@ -9,6 +9,8 @@ from langchain_core.messages import BaseMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver
+
 
 from app.agent.tools import (
   criar_agendamento_tool,
@@ -205,4 +207,4 @@ builder.add_edge("inject_system", "agent")
 builder.add_edge("agent", "save_context")
 builder.add_edge("save_context", END)
 
-graph = builder.compile()
+graph = builder.compile(checkpointer=MemorySaver())
