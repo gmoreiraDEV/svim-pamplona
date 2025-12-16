@@ -53,16 +53,19 @@ def ensure_qdrant_collection(
             vectors_config=VectorParams(size=vector_size, distance=distance),
         )
 
-    try:
-        client.create_payload_index(
-            collection_name=collection_name,
-            field_name="user_id",
-            field_schema={"type": "keyword"},
-        )
-    except Exception as e:
-        if "already exists" in str(e).lower():
-            return
-        print(f"Qdrant index error: {e}")
+    # Índices para filtros rápidos
+    for field in ("user_id", "session_id", "created_at"):
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field,
+                field_schema={"type": "keyword"},
+            )
+        except Exception as e:
+            if "already exists" in str(e).lower():
+                continue
+            print(f"Qdrant index error ({field}): {e}")
+
 
 
 class QdrantMemory:
@@ -87,6 +90,57 @@ class QdrantMemory:
             input=texts,
         )
         return [item.embedding for item in resp.data]
+
+    def _is_valid_id(self, value: Optional[str]) -> bool:
+        return bool(value and value.strip() and value not in ("anon", "anon-session"))
+
+    def get_recent_context(
+        self,
+        session_id: Optional[str],
+        user_id: Optional[str],
+        k: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Recupera as últimas K mensagens usando:
+        - session_id (se presente)
+        - senão user_id
+        """
+        must = []
+
+        if self._is_valid_id(session_id):
+            must.append(FieldCondition(key="session_id", match=MatchValue(value=session_id)))
+        elif self._is_valid_id(user_id):
+            must.append(FieldCondition(key="user_id", match=MatchValue(value=user_id)))
+        else:
+            return []
+
+        query_filter = Filter(must=must)
+
+        # Compatibilidade com versões diferentes do client
+        if hasattr(self.client, "scroll"):
+            points, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=query_filter,
+                with_payload=True,
+                limit=max(k * 5, 50),
+            )
+        elif hasattr(self.client, "scroll_points"):
+            points = self.client.scroll_points(
+                collection_name=self.collection_name,
+                scroll_filter=query_filter,
+                with_payload=True,
+                limit=max(k * 5, 50),
+            ).points
+        else:
+            raise AttributeError("QdrantClient não possui métodos scroll/scroll_points")
+
+        payloads = [p.payload for p in points if getattr(p, "payload", None)]
+
+        # Ordenar por created_at (ISO) e pegar os últimos k
+        payloads.sort(key=lambda x: x.get("created_at", ""))
+        payloads = payloads[-k:]
+
+        return [{"role": p.get("role", "user"), "content": p.get("content", "")} for p in payloads]
 
     def get_user_context(self, user_id: str, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """Busca os K itens de memória mais relevantes de um usuário."""

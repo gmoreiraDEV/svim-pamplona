@@ -134,21 +134,18 @@ def load_context(state: State) -> State:
         return state
 
     try:
-        # CLIENT_ID do ambiente é prioridade; depois o que vier no estado.
         user_id = cliente_id or state.get("cliente_id") or "anon"
-        session_id = os.getenv("SESSION_ID") or state.get("session_id") or "anon-session"
+        session_id = state.get("session_id") or os.getenv("SESSION_ID") or None
+
         state["cliente_id"] = user_id
         state["session_id"] = session_id
-        last_human = next((m for m in reversed(state["messages"]) if m.type == "human"), None)
-        query = last_human.content if last_human else ""
 
-        context_messages = memory.get_user_context(
+        context_messages = memory.get_recent_context(
+            session_id=session_id,
             user_id=user_id,
-            query=query,
-            k=5,
+            k=10,
         )
-        history_text = _format_messages(context_messages)
-        state["history"] = history_text
+        state["history"] = _format_messages(context_messages)
         print(f"[SVIM] Loaded {len(context_messages)} context messages for user_id={user_id} session_id={session_id}")
     except Exception as e:
         print(f"[SVIM] Error loading context: {e}")
@@ -182,13 +179,16 @@ def save_context(state: State) -> State:
 
     try:
         user_id = cliente_id or state.get("cliente_id") or "anon"
+        sid = state.get("session_id") or os.getenv("SESSION_ID") or None
+
         new_messages: List[Dict[str, str]] = []
         for msg in state["messages"]:
             if msg.type in ("human", "ai"):
                 new_messages.append({"role": msg.type, "content": msg.content})
 
-        memory.store_messages(user_id=user_id, session_id=session_id, messages=new_messages)
-        print(f"[SVIM] Stored {len(new_messages)} messages for user_id={user_id} session_id={session_id}")
+        memory.store_messages(user_id=user_id, session_id=sid, messages=new_messages)
+        print(f"[SVIM] Stored {len(new_messages)} messages for user_id={user_id} session_id={sid}")
+
     except Exception as e:
         print(f"[SVIM] Error saving context: {e}")
 
