@@ -24,11 +24,19 @@ async def run_once() -> Dict[str, Any]:
     session_id = os.getenv("SESSION_ID")
 
     try:
-        state = await graph.ainvoke({
-            "messages": [HumanMessage(content=message)],
-            "cliente_id": client_id,
-            "session_id": session_id,
-        })
+        state = await graph.ainvoke(
+            {
+                "messages": [HumanMessage(content=message)],
+                "cliente_id": client_id,
+                "session_id": session_id,
+            },
+            config={
+                "configurable": {
+                    "thread_id": session_id or client_id or "anon",
+                    "checkpoint_ns": "svim",  # separa namespace de checkpoints
+                }
+            },
+        )
 
         messages = state.get("messages", [])
         ai_msg = next((m for m in reversed(messages) if getattr(m, "type", "") == "ai"), None)
