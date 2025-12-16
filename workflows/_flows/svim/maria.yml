@@ -17,6 +17,8 @@ tasks:
       X_API_TOKEN: "{{ kv('X_API_TOKEN_TRINKS') }}"
       ESTABELECIMENTO_ID: "{{ kv('ESTABELECIMENTO_ID') }}"
       URL_BASE: "{{ kv('URL_BASE') }}"
+      QDRANT_URL: "{{ kv('QDRANT_URL') }}"
+      QDRANT_API_KEY: "{{ kv('QDRANT_API_KEY') }}"
 
     commands:
       - "python"

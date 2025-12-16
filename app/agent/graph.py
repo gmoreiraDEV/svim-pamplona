@@ -33,6 +33,11 @@ embedding_model = os.getenv("EMBEDDINGS_MODEL", "text-embedding-3-small")
 qdrant_vector_size = int(os.getenv("QDRANT_VECTOR_SIZE", "1536"))
 memory: Optional[QdrantMemory] = None
 
+print(f"[SVIM] QDRANT_URL={'set' if os.getenv('QDRANT_URL') else 'missing'}")
+print(f"[SVIM] QDRANT_COLLECTION={qdrant_collection}")
+print(f"[SVIM] Qdrant enabled? {memory is not None}")
+
+
 if os.getenv("QDRANT_URL"):
     try:
         memory = QdrantMemory(
@@ -40,6 +45,9 @@ if os.getenv("QDRANT_URL"):
             embedding_model=embedding_model,
             vector_size=qdrant_vector_size,
         )
+        print(f"[SVIM] QDRANT_URL={'set' if os.getenv('QDRANT_URL') else 'missing'}")
+        print(f"[SVIM] QDRANT_COLLECTION={qdrant_collection}")
+        print(f"[SVIM] Qdrant enabled? {memory is not None}")
     except Exception as e:
         print(f"[SVIM] Qdrant desabilitado: {e}")
 
@@ -185,7 +193,11 @@ def inject_system(state: State) -> State:
 
 def save_context(state: State) -> State:
     """Persiste mensagens do diálogo no Qdrant."""
+    print("[SVIM] save_context node entered")
+    print(f"[SVIM] save_context state.cliente_id={state.get('cliente_id')!r} state.session_id={state.get('session_id')!r}")
+
     if memory is None:
+        print("[SVIM] Qdrant memory not configured, skipping save_context")
         return state
 
     try:

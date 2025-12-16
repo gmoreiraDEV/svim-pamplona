@@ -20,15 +20,19 @@ async def run_once() -> Dict[str, Any]:
     if not message:
         raise ValueError("SVIM_MESSAGE não foi definido nas variáveis de ambiente")
 
-    client_id = os.getenv("CLIENT_ID")
-    session_id = os.getenv("SESSION_ID")
+    client_id = (os.getenv("CLIENT_ID") or "").strip() or None
+    session_id = (os.getenv("SESSION_ID") or "").strip() or None
+
 
     try:
+        print(f"[SVIM] Incoming MESSAGE={message!r}")
+        print(f"[SVIM] Incoming CLIENT_ID={client_id!r} SESSION_ID={session_id!r}")
+
         state = await graph.ainvoke(
             {
                 "messages": [HumanMessage(content=message)],
-                "cliente_id": client_id,
-                "session_id": session_id,
+                "cliente_id": client_id or "anon",
+                "session_id": session_id,  # pode ser None
             },
             config={
                 "configurable": {
