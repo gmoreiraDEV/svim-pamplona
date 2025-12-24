@@ -33,6 +33,7 @@ embedding_model = os.getenv("EMBEDDINGS_MODEL", "text-embedding-3-small")
 qdrant_vector_size = int(os.getenv("QDRANT_VECTOR_SIZE", "1536"))
 memory: Optional[QdrantMemory] = None
 
+MAX_HISTORY_CHARS = 4000
 
 if os.getenv("QDRANT_URL"):
     try:
@@ -111,7 +112,7 @@ Rua Rua Pamplona, 1707, Loja 111, Jardim Paulista, São Paulo, SP - 01405-002
 https://maps.google.com/maps?daddr=Rua%20Rua%20Pamplona,%201707,%20Loja%20111,%20Jardim%20Paulista,%20S%C3%A3o%20Paulo,%20SP%20-%2001405-002
 """
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-4.1", max_tokens=600)
 
 TOOLS = [
   criar_agendamento_tool,
@@ -188,21 +189,25 @@ def load_context(state: State) -> State:
 
 def inject_system(state: State) -> State:
     msgs = state["messages"]
-    history = state.get("history") or ""
-    user_id = cliente_id or state.get("cliente_id") or "anon"
-    session_id = state.get("session_id") or os.getenv("SESSION_ID") or "anon-session"
+    history = (state.get("history") or "")[:MAX_HISTORY_CHARS]
 
     system_content = SYSTEM_PROMPT
 
+    new_msgs = []
+    new_msgs.append(SystemMessage(content=system_content))
+
     if history:
-        system_content = f"{SYSTEM_PROMPT}\n\nContexto recente do cliente:\n{history}"
+        new_msgs.append(SystemMessage(content=f"Contexto recente (resumo/trechos):\n{history}"))
 
-    if not msgs or msgs[0].type != "system":
-        msgs = [SystemMessage(content=system_content)] + msgs
-    else:
-        msgs[0] = SystemMessage(content=system_content)
+    rest = [m for m in msgs if m.type != "system"]
+    new_msgs.extend(rest)
 
-    return {"messages": msgs, "history": history, "cliente_id": user_id, "session_id": session_id}
+    return {
+        "messages": new_msgs,
+        "history": history,
+        "cliente_id": state.get("cliente_id"),
+        "session_id": state.get("session_id"),
+    }
 
 
 def save_context(state: State) -> State:
