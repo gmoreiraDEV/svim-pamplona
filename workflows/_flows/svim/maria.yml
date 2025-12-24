@@ -4,7 +4,7 @@ namespace: company.svim
 tasks:
   - id: agent
     type: io.kestra.plugin.docker.Run
-    containerImage: gmoreiradev/svim-maria:v0.0.12
+    containerImage: gmoreiradev/svim-maria:v0.0.13
 
     env:
       SVIM: "SVIM Pamplona"
