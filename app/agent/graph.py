@@ -33,10 +33,6 @@ embedding_model = os.getenv("EMBEDDINGS_MODEL", "text-embedding-3-small")
 qdrant_vector_size = int(os.getenv("QDRANT_VECTOR_SIZE", "1536"))
 memory: Optional[QdrantMemory] = None
 
-print(f"[SVIM] QDRANT_URL={'set' if os.getenv('QDRANT_URL') else 'missing'}")
-print(f"[SVIM] QDRANT_COLLECTION={qdrant_collection}")
-print(f"[SVIM] Qdrant enabled? {memory is not None}")
-
 
 if os.getenv("QDRANT_URL"):
     try:
@@ -71,18 +67,28 @@ ESTILO DE RESPOSTA:
 
 <agendamento>
 ## PASSOS PARA O AGENDAMENTO
-- Capturar o serviço
+- Capturar o serviço perguntando ao cliente
+    - Extrair do resultado o ID do serviço escolhido
+- Capturar a preferência de profissional do cliente
+    - Verificar se o profissional realiza o serviço escolhido
+    - Se não realizar, informar ao cliente e pedir para escolher outro profissional ou serviço
+    - Listar os profissionais que realizam o serviço escolhido
+    - Verificar se o profissional escolhido está disponível no dia e horário desejado
+    - Extrair do resultado o ID do profissional escolhido
 - Capturar o dia e horário desejado
-- Capturar a preferência de profissionais do cliente
-- Capturar o nome e WhatsApp do cliente
-- Devolva um json com esses dados:
-{{"servico": "str",
-"horario": "datetime",
-"profissional": "str",
-"cliente": {{
-  "nome": "str", 
-  "whatsApp": "str",
-  }}
+    - Verificar se o horário está dentro do horário de funcionamento da {svim}
+    - Verificar se o horário está disponível com o profissional escolhido
+    - Se não estiver disponível, sugerir próximos 3 horários disponíveis
+- Utilize os dados coletaos para o agendamento:
+{{
+    "servicoId": "str",
+    "profissionalId": "str",
+    "clienteId": "str",
+    "dataHoraInicio": "str",
+    "duracaoEmMinutos": "str",
+    "valor": "str",
+    "observacoes": "str | None",
+    "confirmado": "bool | None",
 }}
 </agendamento>
 
@@ -95,6 +101,14 @@ KNOWLEDGE:
 - Atendimento da {svim}:
 Segunda à Sábado: 14h às 22h
 Domingo: 14h às 20h
+
+Bem-vindo ao Svim Pamplona,  somos uma rede de salão presente de norte a sudeste do Brasil onde a nossa missão é revelar belezas escondidas e desconhecidas proporcionando bem estar e cuidado ao próximo, atendendo com excelência e ética. 
+Formas de pagamento: Cartão de Crédito, Cartão de Débito, Dinheiro, PIX
+Idiomas: Português, Inglês
+Facilidades: Wi-Fi, Estacionamento - Pago, Atendemos adultos e crianças, Acesso para Deficientes, Aceita cartão de crédito
+
+Rua Rua Pamplona, 1707, Loja 111, Jardim Paulista, São Paulo, SP - 01405-002
+https://maps.google.com/maps?daddr=Rua%20Rua%20Pamplona,%201707,%20Loja%20111,%20Jardim%20Paulista,%20S%C3%A3o%20Paulo,%20SP%20-%2001405-002
 """
 
 model = ChatOpenAI(model="gpt-4.1")
