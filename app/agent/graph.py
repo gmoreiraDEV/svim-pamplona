@@ -2,6 +2,8 @@ import os
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from typing_extensions import Annotated, TypedDict
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, SystemMessage
@@ -30,6 +32,12 @@ session_id = os.getenv("SESSION_ID")
 qdrant_collection = os.getenv("QDRANT_COLLECTION", "svim_conversations")
 embedding_model = os.getenv("EMBEDDINGS_MODEL", "text-embedding-3-small")
 qdrant_vector_size = int(os.getenv("QDRANT_VECTOR_SIZE", "1536"))
+brazil_timezone = ZoneInfo("America/Sao_Paulo")
+now_in_brazil = datetime.now(brazil_timezone)
+
+# Format the time into an ISO 8601 string
+iso_format_brazil = now_in_brazil.isoformat()
+
 
 MAX_HISTORY_CHARS = 4000
 MAX_STORE_CHARS = 1500
@@ -92,6 +100,7 @@ PASSOS PARA O AGENDAMENTO
 REGRAS:
 - Você não deve chamar nenhuma ferramenta mais de 1 vez por solicitação do cliente. 
 - Se já tiver a lista, não repita; apenas pergunte qual item o cliente quer.
+- Não realize agendamentos em datas anteriores a hoje: {iso_format_brazil}.
 
 CLIENTE:
 ID: {cliente_id}
