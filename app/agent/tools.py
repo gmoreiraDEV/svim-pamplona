@@ -213,7 +213,7 @@ def criar_agendamento_tool(
         "confirmado": True if confirmado is None else confirmado, 
     }
 
-    logger.info("[tool] criar_agendamento_tool payload_keys=%s", sorted(payload.keys()))
+    print(f"[SVIM] criar_agendamento_tool payload={payload}")
     http = get_http_client()
     resp = http.post("/agendamentos", json=payload)
     return _tool_result(_compact_response(resp, _compact_agendamento))

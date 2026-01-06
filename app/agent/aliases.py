@@ -2,6 +2,7 @@ SERVICE_ALIASES = {
     # Corte / cabelo
     "corte": "corte",
     "cortar cabelo": "corte",
+    "corte cabelo": "corte",
     "corte feminino": "corte",
     "corte masculino": "corte",
     "cabelo": "corte",

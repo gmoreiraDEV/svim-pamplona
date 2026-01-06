@@ -54,6 +54,21 @@ class HttpClient:
             )
             resp.raise_for_status()
             return resp.json()
+        except requests.exceptions.HTTPError as exc:  # pragma: no cover - comportamento de rede
+            response = exc.response
+            body = ""
+            status = None
+            if response is not None:
+                status = response.status_code
+                try:
+                    body = response.text or ""
+                except Exception:
+                    body = ""
+            body_preview = body.replace("\n", " ")[:500]
+            print(
+                f"[SVIM] HTTP error method={method} url={url} status={status} body={body_preview}"
+            )
+            raise HttpClientError(f"{exc} | body={body_preview}") from exc
         except requests.exceptions.RequestException as exc:  # pragma: no cover - comportamento de rede
             logger.error("HTTP client error", exc_info=exc)
             raise HttpClientError(str(exc))
