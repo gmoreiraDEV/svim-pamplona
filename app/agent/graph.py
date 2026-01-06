@@ -8,12 +8,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage, RemoveMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 
 from langgraph.graph import StateGraph, END
-from langgraph.graph.message import add_messages
+from langgraph.graph.message import add_messages, REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -368,9 +368,21 @@ def inject_system(state: State) -> State:
             SystemMessage(content=f"Contexto recente do cliente:\n{history}")
         )
     new_msgs.extend(m for m in msgs if m.type in ("human", "ai"))
+
+    def _preview(msg: BaseMessage, limit: int = 80) -> str:
+        content = (getattr(msg, "content", "") or "").replace("\n", " ")
+        return content[:limit]
+
+    print(
+        "[SVIM] message order: "
+        + " | ".join(
+            f"{m.type}:{len(getattr(m, 'content', '') or '')}:{_preview(m)}"
+            for m in new_msgs
+        )
+    )
     
     return {
-        "messages": new_msgs,
+        "messages": [RemoveMessage(REMOVE_ALL_MESSAGES), *new_msgs],
         "history": history,
         "cliente_id": state.get("cliente_id"),
         "session_id": state.get("session_id"),
