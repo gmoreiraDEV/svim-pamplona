@@ -176,7 +176,15 @@ class QdrantMemory:
         merged: List[Dict[str, Any]] = []
 
         def _add(msg: Dict[str, Any]):
-            key = (msg.get("role", ""), (msg.get("content") or "").strip())
+            content = msg.get("content")
+            if isinstance(content, list):
+                content = " ".join(str(item) for item in content)
+            elif content is None:
+                content = ""
+            else:
+                content = str(content)
+
+            key = (msg.get("role", ""), content.strip())
             if not key[1]:
                 return
             if key in seen:

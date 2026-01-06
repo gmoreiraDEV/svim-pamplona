@@ -1,4 +1,6 @@
 import os
+import json
+from collections import defaultdict
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from typing_extensions import Annotated, TypedDict
@@ -6,7 +8,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
 
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -41,6 +45,7 @@ iso_format_brazil = now_in_brazil.isoformat()
 
 MAX_HISTORY_CHARS = 4000
 MAX_STORE_CHARS = 1500
+MAX_TOOL_CALLS = int(os.getenv("MAX_TOOL_CALLS_PER_TOOL", "5"))
 
 memory: Optional[QdrantMemory] = None
 
@@ -50,6 +55,155 @@ if os.getenv("QDRANT_URL"):
         embedding_model=embedding_model,
         vector_size=qdrant_vector_size,
     )
+
+_tool_call_counts: defaultdict[str, defaultdict[str, int]] = defaultdict(
+    lambda: defaultdict(int)
+)
+_tool_cache: defaultdict[str, dict[str, Any]] = defaultdict(dict)
+
+
+def _thread_id_from_config(config: RunnableConfig | None) -> str:
+    if isinstance(config, dict):
+        configurable = config.get("configurable") or {}
+    else:
+        configurable = {}
+    return str(configurable.get("thread_id") or "anon")
+
+
+def _reset_tool_counts(thread_id: str) -> None:
+    _tool_call_counts.pop(thread_id, None)
+    _tool_cache.pop(thread_id, None)
+
+
+def _limit_tool_calls(tool: BaseTool) -> BaseTool:
+    """Wrap tool to guard against repeated calls in uma única solicitação."""
+    original_invoke = tool.invoke
+    original_ainvoke = tool.ainvoke
+
+    def _exceeded(thread_id: str) -> bool:
+        return _tool_call_counts[thread_id][tool.name] >= MAX_TOOL_CALLS
+
+    def _bump(thread_id: str) -> None:
+        _tool_call_counts[thread_id][tool.name] += 1
+
+    def limited_invoke(
+        input: Any,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
+    ):
+        thread_id = _thread_id_from_config(config)
+        call_id = input.get("id") if isinstance(input, dict) else thread_id
+        cache_key = None
+        if isinstance(input, dict):
+            payload = input.get("args") if "args" in input else input
+            try:
+                cache_key = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+            except Exception:
+                cache_key = str(payload)
+
+        # Cache hit: devolve ToolMessage imediato
+        if cache_key and cache_key in _tool_cache[thread_id].get(tool.name, {}):
+            cached_content = _tool_cache[thread_id][tool.name][cache_key]
+            return ToolMessage(
+                content=cached_content,
+                name=tool.name,
+                tool_call_id=call_id,
+                status="success",
+            )
+
+        if _exceeded(thread_id):
+            content = json.dumps(
+                {
+                    "error": "TOOL_LIMIT",
+                    "message": (
+                        f"Limite de {MAX_TOOL_CALLS} chamadas atingido "
+                        f"para a ferramenta {tool.name}"
+                    ),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            return ToolMessage(
+                content=content,
+                name=tool.name,
+                tool_call_id=call_id,
+                status="error",
+            )
+        _bump(thread_id)
+        resp = original_invoke(input, config=config, **kwargs)
+        if isinstance(resp, ToolMessage):
+            return resp
+        if not isinstance(resp, (str, list)):
+            resp = json.dumps(resp, ensure_ascii=False, separators=(",", ":"))
+        # Cache only respostas sem error
+        try:
+            parsed = json.loads(resp) if isinstance(resp, str) else None
+            if isinstance(parsed, dict) and not parsed.get("error") and cache_key:
+                _tool_cache[thread_id].setdefault(tool.name, {})[cache_key] = resp
+        except Exception:
+            pass
+        return ToolMessage(content=resp, name=tool.name, tool_call_id=call_id)
+
+    async def limited_ainvoke(
+        input: Any,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
+    ):
+        thread_id = _thread_id_from_config(config)
+        call_id = input.get("id") if isinstance(input, dict) else thread_id
+        cache_key = None
+        if isinstance(input, dict):
+            payload = input.get("args") if "args" in input else input
+            try:
+                cache_key = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+            except Exception:
+                cache_key = str(payload)
+
+        if cache_key and cache_key in _tool_cache[thread_id].get(tool.name, {}):
+            cached_content = _tool_cache[thread_id][tool.name][cache_key]
+            return ToolMessage(
+                content=cached_content,
+                name=tool.name,
+                tool_call_id=call_id,
+                status="success",
+            )
+
+        if _exceeded(thread_id):
+            content = json.dumps(
+                {
+                    "error": "TOOL_LIMIT",
+                    "message": (
+                        f"Limite de {MAX_TOOL_CALLS} chamadas atingido "
+                        f"para a ferramenta {tool.name}"
+                    ),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            return ToolMessage(
+                content=content,
+                name=tool.name,
+                tool_call_id=call_id,
+                status="error",
+            )
+        _bump(thread_id)
+        resp = await original_ainvoke(input, config=config, **kwargs)
+        if isinstance(resp, ToolMessage):
+            return resp
+        if not isinstance(resp, (str, list)):
+            resp = json.dumps(resp, ensure_ascii=False, separators=(",", ":"))
+        try:
+            parsed = json.loads(resp) if isinstance(resp, str) else None
+            if isinstance(parsed, dict) and not parsed.get("error") and cache_key:
+                _tool_cache[thread_id].setdefault(tool.name, {})[cache_key] = resp
+        except Exception:
+            pass
+        return ToolMessage(content=resp, name=tool.name, tool_call_id=call_id)
+
+    # StructuredTool é um Pydantic model; usar object.__setattr__ evita erro de campo desconhecido.
+    object.__setattr__(tool, "invoke", limited_invoke)  # type: ignore[method-assign]
+    object.__setattr__(tool, "ainvoke", limited_ainvoke)  # type: ignore[method-assign]
+    return tool
 
 
 SYSTEM_PROMPT = f"""
@@ -98,7 +252,7 @@ PASSOS PARA O AGENDAMENTO
 </agendamento>
 
 REGRAS:
-- Você não deve chamar nenhuma ferramenta mais de 1 vez por solicitação do cliente. 
+- Nunca chame a mesma ferramenta mais de {MAX_TOOL_CALLS} vezes por solicitação do cliente; se precisar de mais dados, peça ao cliente.
 - Se já tiver a lista, não repita; apenas pergunte qual item o cliente quer.
 - Não realize agendamentos em datas anteriores a hoje: {iso_format_brazil}.
 
@@ -128,11 +282,11 @@ model = ChatOpenAI(
 )
 
 TOOLS = [
-    criar_agendamento_tool,
-    listar_agendamentos_tool,
-    listar_servicos_tool,
-    listar_servicos_profissional_tool,
-    listar_profissionais_tool,
+    _limit_tool_calls(criar_agendamento_tool),
+    _limit_tool_calls(listar_agendamentos_tool),
+    _limit_tool_calls(listar_servicos_tool),
+    _limit_tool_calls(listar_servicos_profissional_tool),
+    _limit_tool_calls(listar_profissionais_tool),
 ]
 
 agent = create_react_agent(
@@ -154,7 +308,21 @@ def _format_messages(messages: List[Dict[str, Any]]) -> str:
     return "\n".join(f"{m['role']}: {m['content']}" for m in messages)
 
 
+def _to_text(content: Any) -> str:
+    """Normaliza conteúdo em string para buscas semânticas."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(_to_text(item) for item in content)
+    return str(content)
+
+
 def load_context(state: State) -> State:
+    thread_id = state.get("session_id") or state.get("cliente_id") or "anon"
+    _reset_tool_counts(str(thread_id))
+
     if memory is None:
         return state
 
@@ -167,7 +335,7 @@ def load_context(state: State) -> State:
         None,
     )
     if last_user:
-        query = last_user.content or ""
+        query = _to_text(last_user.content)
 
     context_messages = memory.get_hybrid_context(
         session_id=session_id,

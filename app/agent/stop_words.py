@@ -1,0 +1,15 @@
+STOPWORDS = {
+    "de",
+    "do",
+    "da",
+    "para",
+    "pra",
+    "um",
+    "uma",
+    "o",
+    "a",
+    "no",
+    "na",
+    "com",
+    "e",
+}
