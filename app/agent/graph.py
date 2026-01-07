@@ -73,12 +73,24 @@ def _thread_id_from_config(config: RunnableConfig | None) -> str:
 def _reset_tool_counts(thread_id: str) -> None:
     _tool_call_counts.pop(thread_id, None)
     _tool_cache.pop(thread_id, None)
+    print(f"[SVIM] tool counters reset for thread_id={thread_id!r}")
 
 
 def _limit_tool_calls(tool: BaseTool) -> BaseTool:
     """Wrap tool to guard against repeated calls in uma única solicitação."""
     original_invoke = tool.invoke
     original_ainvoke = tool.ainvoke
+
+    def _is_error_response(resp: Any) -> bool:
+        if isinstance(resp, ToolMessage):
+            return getattr(resp, "status", "") == "error"
+        if isinstance(resp, str):
+            try:
+                parsed = json.loads(resp)
+                return isinstance(parsed, dict) and bool(parsed.get("error"))
+            except Exception:
+                return False
+        return False
 
     def _exceeded(thread_id: str) -> bool:
         return _tool_call_counts[thread_id][tool.name] >= MAX_TOOL_CALLS
@@ -104,6 +116,8 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
         # Cache hit: devolve ToolMessage imediato
         if cache_key and cache_key in _tool_cache[thread_id].get(tool.name, {}):
             cached_content = _tool_cache[thread_id][tool.name][cache_key]
+            preview = str(cached_content).replace("\n", " ")[:400]
+            print(f"[SVIM] tool cached name={tool.name} result={preview}")
             return ToolMessage(
                 content=cached_content,
                 name=tool.name,
@@ -129,12 +143,53 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
                 tool_call_id=call_id,
                 status="error",
             )
-        _bump(thread_id)
-        resp = original_invoke(input, config=config, **kwargs)
+        try:
+            resp = original_invoke(input, config=config, **kwargs)
+        except Exception as exc:
+            _reset_tool_counts(thread_id)
+            print(
+                f"[SVIM] tool error reset (exception) name={tool.name} thread_id={thread_id!r}"
+            )
+            content = json.dumps(
+                {
+                    "error": "TOOL_EXCEPTION",
+                    "message": str(exc),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            return ToolMessage(
+                content=content,
+                name=tool.name,
+                tool_call_id=call_id,
+                status="error",
+            )
         if isinstance(resp, ToolMessage):
+            if _is_error_response(resp):
+                _reset_tool_counts(thread_id)
+                print(
+                    f"[SVIM] tool error reset (toolmessage) name={tool.name} thread_id={thread_id!r}"
+                )
+                preview = str(resp.content).replace("\n", " ")[:400]
+                print(f"[SVIM] tool result name={tool.name} result={preview}")
+                return resp
+            _bump(thread_id)
+            preview = str(resp.content).replace("\n", " ")[:400]
+            print(f"[SVIM] tool result name={tool.name} result={preview}")
             return resp
         if not isinstance(resp, (str, list)):
             resp = json.dumps(resp, ensure_ascii=False, separators=(",", ":"))
+        if _is_error_response(resp):
+            _reset_tool_counts(thread_id)
+            print(
+                f"[SVIM] tool error reset (error payload) name={tool.name} thread_id={thread_id!r}"
+            )
+            preview = str(resp).replace("\n", " ")[:400]
+            print(f"[SVIM] tool result name={tool.name} result={preview}")
+            return ToolMessage(content=resp, name=tool.name, tool_call_id=call_id)
+        _bump(thread_id)
+        preview = str(resp).replace("\n", " ")[:400]
+        print(f"[SVIM] tool result name={tool.name} result={preview}")
         # Cache only respostas sem error
         try:
             parsed = json.loads(resp) if isinstance(resp, str) else None
@@ -161,6 +216,8 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
 
         if cache_key and cache_key in _tool_cache[thread_id].get(tool.name, {}):
             cached_content = _tool_cache[thread_id][tool.name][cache_key]
+            preview = str(cached_content).replace("\n", " ")[:400]
+            print(f"[SVIM] tool cached name={tool.name} result={preview}")
             return ToolMessage(
                 content=cached_content,
                 name=tool.name,
@@ -186,12 +243,53 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
                 tool_call_id=call_id,
                 status="error",
             )
-        _bump(thread_id)
-        resp = await original_ainvoke(input, config=config, **kwargs)
+        try:
+            resp = await original_ainvoke(input, config=config, **kwargs)
+        except Exception as exc:
+            _reset_tool_counts(thread_id)
+            print(
+                f"[SVIM] tool error reset (exception) name={tool.name} thread_id={thread_id!r}"
+            )
+            content = json.dumps(
+                {
+                    "error": "TOOL_EXCEPTION",
+                    "message": str(exc),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            return ToolMessage(
+                content=content,
+                name=tool.name,
+                tool_call_id=call_id,
+                status="error",
+            )
         if isinstance(resp, ToolMessage):
+            if _is_error_response(resp):
+                _reset_tool_counts(thread_id)
+                print(
+                    f"[SVIM] tool error reset (toolmessage) name={tool.name} thread_id={thread_id!r}"
+                )
+                preview = str(resp.content).replace("\n", " ")[:400]
+                print(f"[SVIM] tool result name={tool.name} result={preview}")
+                return resp
+            _bump(thread_id)
+            preview = str(resp.content).replace("\n", " ")[:400]
+            print(f"[SVIM] tool result name={tool.name} result={preview}")
             return resp
         if not isinstance(resp, (str, list)):
             resp = json.dumps(resp, ensure_ascii=False, separators=(",", ":"))
+        if _is_error_response(resp):
+            _reset_tool_counts(thread_id)
+            print(
+                f"[SVIM] tool error reset (error payload) name={tool.name} thread_id={thread_id!r}"
+            )
+            preview = str(resp).replace("\n", " ")[:400]
+            print(f"[SVIM] tool result name={tool.name} result={preview}")
+            return ToolMessage(content=resp, name=tool.name, tool_call_id=call_id)
+        _bump(thread_id)
+        preview = str(resp).replace("\n", " ")[:400]
+        print(f"[SVIM] tool result name={tool.name} result={preview}")
         try:
             parsed = json.loads(resp) if isinstance(resp, str) else None
             if isinstance(parsed, dict) and not parsed.get("error") and cache_key:

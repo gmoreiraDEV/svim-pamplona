@@ -202,6 +202,24 @@ def criar_agendamento_tool(
         logger.warning("[tool] criar_agendamento_tool missing=%s", missing)
         return _tool_result({"error": "ARGS_INVALIDOS", "missing": missing})
 
+    # Valida IDs numéricos para evitar chamadas inválidas na API
+    if not str(profissionalId).isdigit():
+        return _tool_result(
+            {
+                "error": "PROFISSIONAL_ID_INVALIDO",
+                "message": "profissionalId deve ser numérico",
+                "value": str(profissionalId),
+            }
+        )
+    if not str(servicoId).isdigit():
+        return _tool_result(
+            {
+                "error": "SERVICO_ID_INVALIDO",
+                "message": "servicoId deve ser numérico",
+                "value": str(servicoId),
+            }
+        )
+
     payload = {
         "servicoId": servicoId,
         "clienteId": clienteId,
