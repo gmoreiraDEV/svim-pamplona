@@ -109,6 +109,14 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
         servico_ids.update(_tool_last_ids[thread_id].get("listar_servicos_profissional_tool", set()))
         profissional_ids = _tool_last_ids[thread_id].get("listar_profissionais_tool", set())
 
+        print(
+            "[SVIM] agendamento validate "
+            f"servico_id={servico_id!r} profissional_id={profissional_id!r} "
+            f"servicos_listar={len(_tool_last_ids[thread_id].get('listar_servicos_tool', set()))} "
+            f"servicos_profissional={len(_tool_last_ids[thread_id].get('listar_servicos_profissional_tool', set()))} "
+            f"profissionais={len(profissional_ids)}"
+        )
+
         if not servico_ids:
             return ToolMessage(
                 content=json.dumps(
