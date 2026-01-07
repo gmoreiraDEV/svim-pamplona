@@ -27,6 +27,9 @@ async def run_once() -> Dict[str, Any]:
 
     print(f"[SVIM] Incoming MESSAGE={message!r}")
     print(f"[SVIM] Incoming CLIENT_ID={client_id!r} SESSION_ID={session_id!r}")
+    print(
+        f"[SVIM] thread_id={(session_id or client_id or 'anon')!r} checkpoint_ns='svim'"
+    )
 
     state = await graph.ainvoke(
         {
