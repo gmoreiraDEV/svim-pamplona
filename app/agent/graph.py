@@ -60,6 +60,7 @@ _tool_call_counts: defaultdict[str, defaultdict[str, int]] = defaultdict(
     lambda: defaultdict(int)
 )
 _tool_cache: defaultdict[str, dict[str, Any]] = defaultdict(dict)
+_tool_last_ids: defaultdict[str, dict[str, set[str]]] = defaultdict(dict)
 
 
 def _thread_id_from_config(config: RunnableConfig | None) -> str:
@@ -73,6 +74,7 @@ def _thread_id_from_config(config: RunnableConfig | None) -> str:
 def _reset_tool_counts(thread_id: str) -> None:
     _tool_call_counts.pop(thread_id, None)
     _tool_cache.pop(thread_id, None)
+    _tool_last_ids.pop(thread_id, None)
     print(f"[SVIM] tool counters reset for thread_id={thread_id!r}")
 
 
@@ -80,6 +82,93 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
     """Wrap tool to guard against repeated calls in uma única solicitação."""
     original_invoke = tool.invoke
     original_ainvoke = tool.ainvoke
+
+    def _store_ids(thread_id: str, tool_name: str, resp: Any) -> None:
+        if not isinstance(resp, str):
+            return
+        try:
+            parsed = json.loads(resp)
+        except Exception:
+            return
+        if not isinstance(parsed, dict) or parsed.get("error"):
+            return
+        data = parsed.get("data")
+        if not isinstance(data, list):
+            return
+        ids = {str(item.get("id")) for item in data if isinstance(item, dict) and item.get("id")}
+        if not ids:
+            return
+        _tool_last_ids[thread_id][tool_name] = ids
+
+    def _validate_agendamento_args(thread_id: str, payload: dict[str, Any]) -> ToolMessage | None:
+        servico_id = str(payload.get("servicoId") or "")
+        profissional_id = str(payload.get("profissionalId") or "")
+
+        servico_ids = set()
+        servico_ids.update(_tool_last_ids[thread_id].get("listar_servicos_tool", set()))
+        servico_ids.update(_tool_last_ids[thread_id].get("listar_servicos_profissional_tool", set()))
+        profissional_ids = _tool_last_ids[thread_id].get("listar_profissionais_tool", set())
+
+        if not servico_ids:
+            return ToolMessage(
+                content=json.dumps(
+                    {
+                        "error": "SERVICO_ID_NAO_LISTADO",
+                        "message": "Liste os serviços e use o id do serviço retornado.",
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                name=tool.name,
+                tool_call_id=str(payload.get("id") or thread_id),
+                status="error",
+            )
+        if not profissional_ids:
+            return ToolMessage(
+                content=json.dumps(
+                    {
+                        "error": "PROFISSIONAL_ID_NAO_LISTADO",
+                        "message": "Liste os profissionais e use o id do profissional retornado.",
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                name=tool.name,
+                tool_call_id=str(payload.get("id") or thread_id),
+                status="error",
+            )
+
+        if servico_id not in servico_ids:
+            return ToolMessage(
+                content=json.dumps(
+                    {
+                        "error": "SERVICO_ID_INVALIDO",
+                        "message": "servicoId precisa ser um id retornado pela listagem",
+                        "value": servico_id,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                name=tool.name,
+                tool_call_id=str(payload.get("id") or thread_id),
+                status="error",
+            )
+        if profissional_id not in profissional_ids:
+            return ToolMessage(
+                content=json.dumps(
+                    {
+                        "error": "PROFISSIONAL_ID_INVALIDO",
+                        "message": "profissionalId precisa ser um id retornado pela listagem",
+                        "value": profissional_id,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                name=tool.name,
+                tool_call_id=str(payload.get("id") or thread_id),
+                status="error",
+            )
+        return None
 
     def _is_error_response(resp: Any) -> bool:
         if isinstance(resp, ToolMessage):
@@ -112,6 +201,11 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
                 cache_key = json.dumps(payload, sort_keys=True, ensure_ascii=False)
             except Exception:
                 cache_key = str(payload)
+            if tool.name == "criar_agendamento_tool" and isinstance(payload, dict):
+                validation = _validate_agendamento_args(thread_id, payload)
+                if validation:
+                    validation.tool_call_id = call_id  # type: ignore[assignment]
+                    return validation
 
         # Cache hit: devolve ToolMessage imediato
         if cache_key and cache_key in _tool_cache[thread_id].get(tool.name, {}):
@@ -187,6 +281,7 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
             preview = str(resp).replace("\n", " ")[:400]
             print(f"[SVIM] tool result name={tool.name} result={preview}")
             return ToolMessage(content=resp, name=tool.name, tool_call_id=call_id)
+        _store_ids(thread_id, tool.name, resp)
         _bump(thread_id)
         preview = str(resp).replace("\n", " ")[:400]
         print(f"[SVIM] tool result name={tool.name} result={preview}")
@@ -213,6 +308,11 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
                 cache_key = json.dumps(payload, sort_keys=True, ensure_ascii=False)
             except Exception:
                 cache_key = str(payload)
+            if tool.name == "criar_agendamento_tool" and isinstance(payload, dict):
+                validation = _validate_agendamento_args(thread_id, payload)
+                if validation:
+                    validation.tool_call_id = call_id  # type: ignore[assignment]
+                    return validation
 
         if cache_key and cache_key in _tool_cache[thread_id].get(tool.name, {}):
             cached_content = _tool_cache[thread_id][tool.name][cache_key]
@@ -287,6 +387,7 @@ def _limit_tool_calls(tool: BaseTool) -> BaseTool:
             preview = str(resp).replace("\n", " ")[:400]
             print(f"[SVIM] tool result name={tool.name} result={preview}")
             return ToolMessage(content=resp, name=tool.name, tool_call_id=call_id)
+        _store_ids(thread_id, tool.name, resp)
         _bump(thread_id)
         preview = str(resp).replace("\n", " ")[:400]
         print(f"[SVIM] tool result name={tool.name} result={preview}")
@@ -353,6 +454,9 @@ REGRAS:
 - Nunca chame a mesma ferramenta mais de {MAX_TOOL_CALLS} vezes por solicitação do cliente; se precisar de mais dados, peça ao cliente.
 - Se já tiver a lista, não repita; apenas pergunte qual item o cliente quer.
 - Não realize agendamentos em datas anteriores a hoje: {iso_format_brazil}.
+- Nunca informe valores/preços ao cliente, a menos que ele pergunte diretamente.
+- Quando precisar do valor internamente para criar o agendamento, liste serviços com incluirValor=true, mas não mencione o valor ao cliente.
+- Nunca diga que você é um sistema/IA/agente ou mencione limitações técnicas. Se algo falhar, peça para o cliente tentar novamente mais tarde ou ligar diretamente para a loja. Telefone (11) 9.4301-7117.
 
 CLIENTE:
 ID: {cliente_id}

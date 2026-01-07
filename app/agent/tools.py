@@ -36,11 +36,13 @@ def _trim_fields(item: Dict[str, Any], allowed_keys: Iterable[str]) -> Dict[str,
     }
 
 
-def _compact_service(item: Dict[str, Any]) -> Dict[str, Any]:
-    service = _trim_fields(
-        item,
-        ("id", "nome", "categoria", "valor", "duracaoEmMinutos"),
-    )
+def _compact_service(item: Dict[str, Any], include_valor: bool = False) -> Dict[str, Any]:
+    keys = ["id", "nome", "categoria", "duracaoEmMinutos"]
+    if include_valor:
+        keys.append("valor")
+    service = _trim_fields(item, keys)
+    if include_valor and "valor" not in service and "preco" in item:
+        service["valor"] = item.get("preco")
     if "descricao" in item:
         service["descricao"] = str(item["descricao"])[:160]
     return service
@@ -126,6 +128,7 @@ def listar_servicos_profissional_tool(
     profissionalId: int,
     page: int = 1,
     pageSize: int = 50,
+    incluirValor: bool = False,
 ) -> str:
     """Lista os serviços oferecidos por um profissional específico."""
     params = {
@@ -146,7 +149,9 @@ def listar_servicos_profissional_tool(
 
     http = get_http_client()
     resp = http.get(f"/profissionais/{profissionalId}/servicos", params=params)
-    return _tool_result(_compact_response(resp, _compact_service))
+    return _tool_result(
+        _compact_response(resp, lambda item: _compact_service(item, incluirValor))
+    )
 
 @tool
 def listar_servicos_tool(
@@ -154,7 +159,8 @@ def listar_servicos_tool(
     categoria: str | None = None,
     somenteVisiveisCliente: bool | None = None,
     page: int | None = 1,
-    pageSize: int | None = 50
+    pageSize: int | None = 50,
+    incluirValor: bool = False,
 ) -> str:
     """Lista serviços filtrando por nome, categoria e visibilidade."""
     params: Dict[str, Any] = {
@@ -174,7 +180,9 @@ def listar_servicos_tool(
 
     http = get_http_client()
     resp = http.get("/servicos", params=params)
-    return _tool_result(_compact_response(resp, _compact_service))
+    return _tool_result(
+        _compact_response(resp, lambda item: _compact_service(item, incluirValor))
+    )
 
 @tool
 def criar_agendamento_tool(
